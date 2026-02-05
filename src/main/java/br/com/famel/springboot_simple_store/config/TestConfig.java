@@ -1,6 +1,6 @@
 package br.com.famel.springboot_simple_store.config;
 
-import br.com.famel.springboot_simple_store.entity.User;
+import br.com.famel.springboot_simple_store.entities.User;
 import br.com.famel.springboot_simple_store.repositories.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
