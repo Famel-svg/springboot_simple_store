@@ -39,7 +39,7 @@ public class TestConfig implements CommandLineRunner {
 
         productRepository.saveAll(Arrays.asList(p1, p2, p3, p4, p5));
 
-        Category c1 = new Category("TV", null);
+        Category c1 = new Category("Electronics", null);
         Category c2 = new Category("Books", null);
         Category c3 = new Category("Computers", null);
 
@@ -56,8 +56,8 @@ public class TestConfig implements CommandLineRunner {
         User u1 = new User(null,"Maria","Maria@gmail.com","98888888","123456");
         User u2 = new User(null,"Alex","Alex@gmail.com","9777777","123456");
 
-        Order o1 = new Order(null, Instant.parse("2019-06-20T19:53:07Z"), OrderStatus.PAID, u1);
-        Order o2 = new Order(null, Instant.parse("2019-07-21T03:42:10Z"), OrderStatus.WAITING_PAYMENT , u2);
+        Order o1 = new Order (null, Instant.parse("2019-06-20T19:53:07Z"), OrderStatus.PAID, u1);
+        Order o2 = new Order(null, Instant.parse("2019-07-21T03:42:10Z"),OrderStatus.WAITING_PAYMENT, u2);
         Order o3 = new Order(null, Instant.parse("2019-07-22T15:21:22Z"), OrderStatus.PAID, u1);
 
         userRepository.saveAll(Arrays.asList(u1, u2));
