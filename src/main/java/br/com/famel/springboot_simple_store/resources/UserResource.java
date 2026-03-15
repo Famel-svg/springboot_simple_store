@@ -10,7 +10,7 @@ import java.net.URI;
 import java.util.List;
 
 @RestController
-@RequestMapping("/users")
+@RequestMapping(value = {"/users", "/user"})
 public class UserResource {
 
     @Autowired

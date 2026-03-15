@@ -2,6 +2,7 @@ package br.com.famel.springboot_simple_store.service;
 
 import br.com.famel.springboot_simple_store.entities.User;
 import br.com.famel.springboot_simple_store.repositories.UserRepository;
+import br.com.famel.springboot_simple_store.service.exceptions.ResourceNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import java.util.List;
@@ -19,7 +20,7 @@ public class UserService {
 
     public User findById(Long id) {
         Optional<User> obj = repository.findById(id);
-        return obj.get();
+        return obj.orElseThrow(() -> new ResourceNotFoundException(id));
     }
 
     public User insert(User obj) {
