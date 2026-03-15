@@ -2,7 +2,6 @@ package br.com.famel.springboot_simple_store.service;
 
 import br.com.famel.springboot_simple_store.entities.Product;
 import br.com.famel.springboot_simple_store.repositories.ProductRepository;
-import br.com.famel.springboot_simple_store.service.exceptions.ResourceNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -21,6 +20,6 @@ public class ProductService {
 
     public Product findById(Long id) {
         Optional<Product> obj = repository.findById(id);
-        return obj.orElseThrow(() -> new ResourceNotFoundException(id));
+        return obj.get();
     }
 }

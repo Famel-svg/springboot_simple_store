@@ -4,7 +4,6 @@ import br.com.famel.springboot_simple_store.entities.Category;
 import br.com.famel.springboot_simple_store.entities.Order;
 import br.com.famel.springboot_simple_store.repositories.CategoryRepository;
 import br.com.famel.springboot_simple_store.repositories.OrderRepository;
-import br.com.famel.springboot_simple_store.service.exceptions.ResourceNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -23,6 +22,6 @@ public class CategoryService {
 
     public Category findById(Long id) {
         Optional<Category> obj = repository.findById(id);
-        return obj.orElseThrow(() -> new ResourceNotFoundException(id));
+        return obj.get();
     }
 }
