@@ -4,6 +4,7 @@ import br.com.famel.springboot_simple_store.entities.User;
 import br.com.famel.springboot_simple_store.repositories.UserRepository;
 import br.com.famel.springboot_simple_store.service.exceptions.DatabaseException;
 import br.com.famel.springboot_simple_store.service.exceptions.ResourceNotFoundException;
+import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.EmptyResultDataAccessException;
@@ -42,9 +43,15 @@ public class UserService {
     }
 
     public User update(Long id, User obj) {
-        User entity = repository.getReferenceById(id);
-        updateData(entity, obj);
-        return repository.save(obj);
+        try {
+            User entity = repository.getReferenceById(id);
+            updateData(entity, obj);
+            return repository.save(obj);
+        }
+        catch (EntityNotFoundException e) {
+            e.printStackTrace();
+            throw new ResourceNotFoundException(id);
+        }
     }
 
     private void updateData(User entity, User obj) {
