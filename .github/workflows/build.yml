@@ -32,11 +32,8 @@ jobs:
           distribution: "temurin"
           cache: maven
 
-      - name: Permissão de execução no Maven Wrapper
-        run: chmod +x mvnw
-
       - name: Build com Maven (sem testes)
-        run: ./mvnw clean package -DskipTests -B
+        run: sh mvnw clean package -DskipTests -B
 
       - name: Upload do JAR como artefato
         uses: actions/upload-artifact@v4
