@@ -1,0 +1,56 @@
+version: "3.9"
+
+# ──────────────────────────────────────────────
+# Docker Compose – Desenvolvimento LOCAL
+# Uso: docker compose up --build
+# ──────────────────────────────────────────────
+
+services:
+
+  # ── Banco de dados PostgreSQL ──────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: store-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: storedb
+      POSTGRES_USER: ${DB_USER:-sa}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-sa}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - store-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-sa} -d storedb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Aplicação Spring Boot ─────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: store-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/storedb
+      SPRING_DATASOURCE_USERNAME: ${DB_USER:-sa}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-sa}
+    ports:
+      - "8080:8080"
+    networks:
+      - store-net
+
+volumes:
+  postgres_data:
+
+networks:
+  store-net:
+    driver: bridge

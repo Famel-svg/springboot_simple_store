@@ -5,7 +5,6 @@ import br.com.famel.springboot_simple_store.entities.Product;
 import jakarta.persistence.Embeddable;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
-
 import java.io.Serializable;
 import java.util.Objects;
 

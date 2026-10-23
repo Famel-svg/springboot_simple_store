@@ -1,0 +1,216 @@
+# ══════════════════════════════════════════════════════════════════
+#  Azure DevOps Pipeline – springboot-simple-store
+#  Abordagem A: build → test → push ACR → staging → aprovação → prod
+# ══════════════════════════════════════════════════════════════════
+
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+
+pr:
+  branches:
+    include:
+      - main
+
+# ── Variáveis globais ──────────────────────────────────────────────
+variables:
+  # Defina estas variáveis no portal do Azure DevOps (Library > Variable Groups)
+  # ou diretamente em Pipelines > Edit > Variables
+  ACR_NAME: "$(ACR_NAME)"                         # ex: meuacr
+  ACR_LOGIN_SERVER: "$(ACR_NAME).azurecr.io"
+  IMAGE_NAME: "springboot-simple-store"
+  IMAGE_TAG: "$(Build.BuildId)"
+  AKS_RESOURCE_GROUP: "$(AKS_RESOURCE_GROUP)"     # ex: rg-store
+  AKS_CLUSTER_NAME: "$(AKS_CLUSTER_NAME)"         # ex: aks-store
+  MAVEN_CACHE_FOLDER: $(Pipeline.Workspace)/.m2/repository
+  MAVEN_OPTS: "-Dmaven.repo.local=$(MAVEN_CACHE_FOLDER)"
+
+# ── Pool padrão ───────────────────────────────────────────────────
+pool:
+  vmImage: "ubuntu-latest"
+
+# ══════════════════════════════════════════════════════════════════
+stages:
+
+# ── STAGE 1: BUILD ────────────────────────────────────────────────
+  - stage: Build
+    displayName: "🔨 Build"
+    jobs:
+      - job: MavenBuild
+        displayName: "Compilar com Maven"
+        steps:
+          - task: Cache@2
+            displayName: "Cache de dependências Maven"
+            inputs:
+              key: 'maven | "$(Agent.OS)" | **/pom.xml'
+              restoreKeys: |
+                maven | "$(Agent.OS)"
+                maven
+              path: $(MAVEN_CACHE_FOLDER)
+
+          - task: Maven@4
+            displayName: "mvn clean package (sem testes)"
+            inputs:
+              mavenPomFile: "pom.xml"
+              goals: "clean package"
+              options: "-DskipTests -B $(MAVEN_OPTS)"
+              publishJUnitResults: false
+              javaHomeOption: "JDKVersion"
+              jdkVersionOption: "1.21"
+
+          - task: PublishPipelineArtifact@1
+            displayName: "Publicar JAR como artefato"
+            inputs:
+              targetPath: "$(System.DefaultWorkingDirectory)/target"
+              artifact: "jar-artifact"
+
+# ── STAGE 2: TEST ─────────────────────────────────────────────────
+  - stage: Test
+    displayName: "🧪 Testes"
+    dependsOn: Build
+    jobs:
+      - job: RunTests
+        displayName: "Executar testes com H2"
+        steps:
+          - task: Cache@2
+            displayName: "Cache de dependências Maven"
+            inputs:
+              key: 'maven | "$(Agent.OS)" | **/pom.xml'
+              restoreKeys: |
+                maven | "$(Agent.OS)"
+                maven
+              path: $(MAVEN_CACHE_FOLDER)
+
+          - task: Maven@4
+            displayName: "mvn test (perfil test – H2)"
+            inputs:
+              mavenPomFile: "pom.xml"
+              goals: "test"
+              options: "-B $(MAVEN_OPTS) -Dspring.profiles.active=test"
+              publishJUnitResults: true
+              testResultsFiles: "**/surefire-reports/TEST-*.xml"
+              javaHomeOption: "JDKVersion"
+              jdkVersionOption: "1.21"
+
+# ── STAGE 3: DOCKER BUILD & PUSH ──────────────────────────────────
+  - stage: DockerPush
+    displayName: "🐳 Docker → ACR"
+    dependsOn: Test
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - job: DockerBuildPush
+        displayName: "Build e push da imagem para ACR"
+        steps:
+          - task: Docker@2
+            displayName: "Login no Azure Container Registry"
+            inputs:
+              command: login
+              containerRegistry: "$(ACR_SERVICE_CONNECTION)"  # Service Connection configurada no Azure DevOps
+
+          - task: Docker@2
+            displayName: "Build da imagem Docker"
+            inputs:
+              command: build
+              repository: "$(ACR_LOGIN_SERVER)/$(IMAGE_NAME)"
+              dockerfile: "$(System.DefaultWorkingDirectory)/Dockerfile"
+              tags: |
+                $(IMAGE_TAG)
+                latest
+
+          - task: Docker@2
+            displayName: "Push da imagem para ACR"
+            inputs:
+              command: push
+              repository: "$(ACR_LOGIN_SERVER)/$(IMAGE_NAME)"
+              tags: |
+                $(IMAGE_TAG)
+                latest
+
+# ── STAGE 4: DEPLOY STAGING ───────────────────────────────────────
+  - stage: DeployStaging
+    displayName: "🚀 Deploy → Staging"
+    dependsOn: DockerPush
+    condition: succeeded()
+    jobs:
+      - deployment: DeployToStaging
+        displayName: "Deploy no namespace 'staging' do AKS"
+        environment: "staging"           # Crie este Environment no portal do Azure DevOps
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: KubernetesManifest@1
+                  displayName: "Aplicar namespaces"
+                  inputs:
+                    action: deploy
+                    connectionType: azureResourceManager
+                    azureSubscriptionConnection: "$(AZURE_SERVICE_CONNECTION)"
+                    azureResourceGroup: "$(AKS_RESOURCE_GROUP)"
+                    kubernetesCluster: "$(AKS_CLUSTER_NAME)"
+                    manifests: "kubernetes/namespace.yml"
+
+                - task: KubernetesManifest@1
+                  displayName: "Deploy PostgreSQL – staging"
+                  inputs:
+                    action: deploy
+                    connectionType: azureResourceManager
+                    azureSubscriptionConnection: "$(AZURE_SERVICE_CONNECTION)"
+                    azureResourceGroup: "$(AKS_RESOURCE_GROUP)"
+                    kubernetesCluster: "$(AKS_CLUSTER_NAME)"
+                    namespace: staging
+                    manifests: "kubernetes/postgres-staging.yml"
+
+                - task: KubernetesManifest@1
+                  displayName: "Deploy App – staging"
+                  inputs:
+                    action: deploy
+                    connectionType: azureResourceManager
+                    azureSubscriptionConnection: "$(AZURE_SERVICE_CONNECTION)"
+                    azureResourceGroup: "$(AKS_RESOURCE_GROUP)"
+                    kubernetesCluster: "$(AKS_CLUSTER_NAME)"
+                    namespace: staging
+                    manifests: "kubernetes/app-staging.yml"
+                    containers: "$(ACR_LOGIN_SERVER)/$(IMAGE_NAME):$(IMAGE_TAG)"
+
+# ── STAGE 5: APROVAÇÃO MANUAL ─────────────────────────────────────
+# A aprovação é configurada no portal do Azure DevOps:
+# Pipelines > Environments > production > Approvals and checks
+# Adicione um "Approvals" check com o(s) aprovador(es) desejado(s).
+
+# ── STAGE 6: DEPLOY PRODUCTION ────────────────────────────────────
+  - stage: DeployProduction
+    displayName: "🏭 Deploy → Production"
+    dependsOn: DeployStaging
+    condition: succeeded()
+    jobs:
+      - deployment: DeployToProduction
+        displayName: "Deploy no namespace 'production' do AKS"
+        environment: "production"        # Adicione Approval check neste Environment
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: KubernetesManifest@1
+                  displayName: "Deploy PostgreSQL – production"
+                  inputs:
+                    action: deploy
+                    connectionType: azureResourceManager
+                    azureSubscriptionConnection: "$(AZURE_SERVICE_CONNECTION)"
+                    azureResourceGroup: "$(AKS_RESOURCE_GROUP)"
+                    kubernetesCluster: "$(AKS_CLUSTER_NAME)"
+                    namespace: production
+                    manifests: "kubernetes/postgres-production.yml"
+
+                - task: KubernetesManifest@1
+                  displayName: "Deploy App – production"
+                  inputs:
+                    action: deploy
+                    connectionType: azureResourceManager
+                    azureSubscriptionConnection: "$(AZURE_SERVICE_CONNECTION)"
+                    azureResourceGroup: "$(AKS_RESOURCE_GROUP)"
+                    kubernetesCluster: "$(AKS_CLUSTER_NAME)"
+                    namespace: production
+                    manifests: "kubernetes/app-production.yml"
+                    containers: "$(ACR_LOGIN_SERVER)/$(IMAGE_NAME):$(IMAGE_TAG)"
